@@ -42,13 +42,21 @@ class R_tree():
     def insert(self, E):
         L = self.choose_leaf(self.root, E)
         Ll = None
+        print("Leaf chosen:")
+        L.print_node()
         if L.no_of_keys < self.M: # Mame misto
             L.keys[L.no_of_keys] = E
             L.no_of_keys += 1    
         else: # Nemame misto
             L, Ll = L.split_node(E)
+        print("After potential split")
+        L.print_node()
+        if Ll:
+            print("Ll:")
+            Ll.print_node()
+
         
-        self.root, Ll = self.adjust_tree(L, Ll) # TODO Poslat tam navic kopii L nodu v pripade ze se rozlomil? (kvuli porovnavani)
+        L, Ll = self.adjust_tree(L, Ll) # TODO Poslat tam navic kopii L nodu v pripade ze se rozlomil? (kvuli porovnavani)
         if Ll is not None:
             print("NEW ROOOT")
             new_root = R_node(self.M, self.ide_counter, None, is_root=True, is_leaf=False)
@@ -65,6 +73,10 @@ class R_tree():
             Ll.is_root = False
             self.root = new_root
             self.ide_counter = chr(ord(self.ide_counter) + 1)
+        else:
+            self.root = L
+
+        self.adjust_preds(self.root)
 
     def choose_leaf(self, N, E):
         # CL2
@@ -98,8 +110,13 @@ class R_tree():
 
         # AT3
         P = N.pred
-        En = P.find_record(N) # OPRAVIT metodu - ok - vypada to ze je to v poradku
+
+        print("Pred:")
+        P.print_node()
+
+        En, idx = P.find_record(N) # OPRAVIT metodu - ok - vypada to ze je to v poradku
         En.I = get_bounded_rectangle(N.keys)
+        P.children[idx] = N
 
         print("AT3")
 
@@ -118,8 +135,19 @@ class R_tree():
             else:
                 print("AT4.2")
                 P, Pp = P.split_node(Enn, True, Nn)
+                print("After split>")
+                P.print_node()
+                Pp.print_node()
                 return self.adjust_tree(P, Pp)
         return self.adjust_tree(P, None)
+
+    def adjust_preds(self, N):
+        if N is None:
+            return
+        for child in N.children:
+            if child:
+                child.pred = N
+                self.adjust_preds(child)
 
     def print_tree(self, N, depth):
         if N is None:
@@ -128,12 +156,14 @@ class R_tree():
             self.print_tree(child, depth+1)
         if N.is_leaf:
             print("LEAF")
+        elif N.is_root:
+            print("ROOT")
         else:
             print("NOT LEAF")
         for key in N.keys:
             if key is None:
                 break
-            print("Node {}, Key {}: Depth: {}".format(N.ide, key.ide, depth), end=" ")
+            print("Node {}, Key {}: Depth: {}, Pred: {}".format(N.ide, key.ide, depth, N.pred.ide if N.pred else "None"), end=" ")
             key.I.print_rec()
 
 class R_node():
@@ -222,12 +252,14 @@ class R_node():
         return self.ret_split(first, second, first_children, second_children, has_children)
 
     def find_record(self, N):
+        print("Find record, no_of_keys:", self.no_of_keys)
         for i in range(self.no_of_keys):
-            print("for", i, N.ide, self.children[i].ide)
+            print(i, len(self.children), len(self.keys))
+            print("for", i, N.ide, self.children[i].ide, self.keys[i].ide)
             if N.ide == self.keys[i].ide:    
-                assert(N != self.children[i])
-                return self.keys[i]
-        return None
+                # assert(N != self.children[i])
+                return self.keys[i], i
+        return None, None
 
     def ret_split(self, first, second, first_children, second_children, has_children):
         print("ret_split, ", self.ide, self.ide + self.ide[-1])
@@ -247,6 +279,17 @@ class R_node():
                 self.keys[i] = keys[i]
                 if has_children:
                     self.children[i] = children[i]
+
+    def print_node(self):
+        print("Node id: {}, keys:".format(self.ide), end=" ")
+        for key in self.keys:
+            if key is None:
+                print("Nonekey")
+                continue
+            print("Key id: {}".format(key.ide))
+            key.I.print_rec()
+        print()
+
 
 
 def pick_seeds(records, children=None, has_children=False):
@@ -335,7 +378,7 @@ def help_QS2(M, a, b, r):
 
 
 if __name__ == "__main__":
-    rt = R_tree(3)
+    rt = R_tree(2)
     rt.insert(Index_Record(Rectangle(1, 2, 1, 2), 1))
     rt.print_tree(rt.root, 0)
     print()
@@ -360,14 +403,15 @@ if __name__ == "__main__":
     rt.print_tree(rt.root, 0)
     print()
 
-    # PO SEM DOBRE, pak se ztrati zaznam <(3, 4, 3, 4), 2> # TODO zjistit proc a opravit chybu - chybi AAA
     rt.insert(Index_Record(Rectangle(5, 7, 5, 6), 7))
     print("ok3")
     rt.print_tree(rt.root, 0)
     print()
 
-    # Tady se to rozsype jako domecek z karet
     rt.insert(Index_Record(Rectangle(1, 3, 7, 9), 8))
     print("ok4")
+    rt.print_tree(rt.root, 0)
 
+    rt.insert(Index_Record(Rectangle(20, 23, 15, 19), 9))
+    print("ok4")
     rt.print_tree(rt.root, 0)
