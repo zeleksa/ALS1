@@ -1,6 +1,22 @@
 import numpy as np
 
 
+class ID_set():
+    def __init__(self):
+        self.ide_counter = 'A'
+        self.ide = 'A'
+
+    def get_ide(self):
+        ret = self.ide
+        offset = 'A' if ret == len(ret)*'Z' else ''
+        if self.ide[-1] == 'Z':
+            self.ide = self.ide_counter + ret[:-1] + offset
+            self.ide_counter = chr(ord(self.ide_counter) + 1)
+        else:
+            self.ide = self.ide[:-1] + chr(ord(self.ide[-1]) + 1)
+        return ret
+        
+
 class Rectangle():
     def __init__(self, x1, x2, y1, y2):
         self.x1 = x1
@@ -35,9 +51,9 @@ class Index_Record():
 
 class R_tree():
     def __init__(self, M):
-        self.root = R_node(M, 'A', None, is_root=True, is_leaf=True)
         self.M = M
-        self.ide_counter = 'B'
+        self.id_set = ID_set()
+        self.root = R_node(M, self.id_set, None, is_root=True, is_leaf=True)
     
     def insert(self, E):
         L = self.choose_leaf(self.root, E)
@@ -54,28 +70,25 @@ class R_tree():
         if Ll:
             print("Ll:")
             Ll.print_node()
-
         
-        L, Ll = self.adjust_tree(L, Ll) # TODO Poslat tam navic kopii L nodu v pripade ze se rozlomil? (kvuli porovnavani)
+        L, Ll = self.adjust_tree(L, Ll)
         if Ll is not None:
             print("NEW ROOOT")
-            new_root = R_node(self.M, self.ide_counter, None, is_root=True, is_leaf=False)
-            new_root.keys[0] = Index_Record(get_bounded_rectangle(L.keys), L.ide)#chr(ord(self.ide_counter) + 1))
-            new_root.keys[1] = Index_Record(get_bounded_rectangle(Ll.keys), Ll.ide)#chr(ord(self.ide_counter) + 2))
+            new_root = R_node(self.M, self.id_set, None, is_root=True, is_leaf=False)
+            new_root.keys[0] = Index_Record(get_bounded_rectangle(L.keys), L.ide)
+            new_root.keys[1] = Index_Record(get_bounded_rectangle(Ll.keys), Ll.ide)
             new_root.children[0] = L
             new_root.children[1] = Ll
-            new_root.children[0].ide = L.ide#chr(ord(self.ide_counter) + 1)
-            new_root.children[1].ide = Ll.ide#chr(ord(self.ide_counter) + 2)
+            new_root.children[0].ide = L.ide
+            new_root.children[1].ide = Ll.ide
             new_root.no_of_keys = 2
             L.pred = new_root
             L.is_root = False
             Ll.pred = new_root
             Ll.is_root = False
             self.root = new_root
-            self.ide_counter = chr(ord(self.ide_counter) + 1)
         else:
             self.root = L
-
         self.adjust_preds(self.root)
 
     def choose_leaf(self, N, E):
@@ -97,7 +110,7 @@ class R_tree():
             elif diff == minimum and F is not None:
                 if record.I.area() < F.I.area(): # Vzit mensi obdelnik
                     F = record
-                    pf = i # pf je id?
+                    pf = i
         
         assert(pf != -1)
         # CL4
@@ -114,7 +127,7 @@ class R_tree():
         print("Pred:")
         P.print_node()
 
-        En, idx = P.find_record(N) # OPRAVIT metodu - ok - vypada to ze je to v poradku
+        En, idx = P.find_record(N)
         En.I = get_bounded_rectangle(N.keys)
         P.children[idx] = N
 
@@ -128,7 +141,7 @@ class R_tree():
             Enn = Index_Record(get_bounded_rectangle(Nn.keys), ide=Nn.ide)
             if P.no_of_keys < self.M:
                 P.keys[P.no_of_keys] = Enn
-                P.children[P.no_of_keys] = Nn # TODO promyslet
+                P.children[P.no_of_keys] = Nn
                 P.no_of_keys += 1
                 print("AT4.1")
                 return self.adjust_tree(P, None)
@@ -142,7 +155,7 @@ class R_tree():
         return self.adjust_tree(P, None)
 
     def adjust_preds(self, N):
-        if N is None:
+        if N is None or N.is_leaf:
             return
         for child in N.children:
             if child:
@@ -166,9 +179,22 @@ class R_tree():
             print("Node {}, Key {}: Depth: {}, Pred: {}".format(N.ide, key.ide, depth, N.pred.ide if N.pred else "None"), end=" ")
             key.I.print_rec()
 
+    def missing_test(self, N, ides):
+        if N is None:
+            return ides
+        for child in N.children:
+            ides = self.missing_test(child, ides)
+        if N.is_leaf:
+            for key in N.keys:
+                if key:
+                    ides[key.ide] = True
+        return ides
+        
+
 class R_node():
-    def __init__(self, M, ide, pred, is_root=False, is_leaf=False):
-        self.ide = ide
+    def __init__(self, M, id_set, pred, is_root=False, is_leaf=False, origin_id=None):
+        self.ide = origin_id if origin_id else id_set.get_ide()
+        self.id_set = id_set
         self.M = M
         self.pred = pred
         self.keys = [None for _ in range(M)]
@@ -179,7 +205,6 @@ class R_node():
 
     def __eq__(self, other): 
         if not isinstance(other, R_node):
-            # don't attempt to compare against unrelated types
             return False
         print("eq", len(self.keys), len(other.keys))
         for i in range(self.M):
@@ -256,15 +281,13 @@ class R_node():
         for i in range(self.no_of_keys):
             print(i, len(self.children), len(self.keys))
             print("for", i, N.ide, self.children[i].ide, self.keys[i].ide)
-            if N.ide == self.keys[i].ide:    
-                # assert(N != self.children[i])
+            if N.ide == self.keys[i].ide:
                 return self.keys[i], i
         return None, None
 
     def ret_split(self, first, second, first_children, second_children, has_children):
-        print("ret_split, ", self.ide, self.ide + self.ide[-1])
-        L = R_node(self.M, self.ide, self.pred, is_root=self.is_root, is_leaf=self.is_leaf)
-        Ll = R_node(self.M, self.ide + self.ide[-1], self.pred, is_root=self.is_root, is_leaf=self.is_leaf)
+        L = R_node(self.M, self.id_set, self.pred, is_root=self.is_root, is_leaf=self.is_leaf, origin_id=self.ide)
+        Ll = R_node(self.M, self.id_set, self.pred, is_root=self.is_root, is_leaf=self.is_leaf)
         L.set_keys(first, first_children, has_children)
         Ll.set_keys(second, second_children, has_children)
         return L, Ll
@@ -293,7 +316,7 @@ class R_node():
 
 
 def pick_seeds(records, children=None, has_children=False):
-    d = 0
+    d = -np.inf
     F1 = F2 = C1 = C2 = None
     idx1 = idx2 = -1
     for i in range(len(records)):
@@ -306,6 +329,7 @@ def pick_seeds(records, children=None, has_children=False):
                 break
             J = get_bounded_rectangle([E1, E2])
             area = J.area() - E1.I.area() - E2.I.area()
+            print(area)
             if area > d:
                 d = area
                 F1 = E1
@@ -363,7 +387,6 @@ def get_bounded_rectangle(records):
 
 
 def help_QS2(M, a, b, r):
-    # Prosim at to funguje...
     if a >= M/2:
         return False
     if b < M/2:
@@ -378,40 +401,68 @@ def help_QS2(M, a, b, r):
 
 
 if __name__ == "__main__":
-    rt = R_tree(2)
-    rt.insert(Index_Record(Rectangle(1, 2, 1, 2), 1))
+
+    rt = R_tree(3)
+    rt.insert(Index_Record(Rectangle(1, 2, 1, 2), 0))
     rt.print_tree(rt.root, 0)
     print()
-    rt.insert(Index_Record(Rectangle(3, 4, 3, 4), 2))
+    rt.insert(Index_Record(Rectangle(3, 4, 3, 4), 1))
     rt.print_tree(rt.root, 0)
     print()
-    rt.insert(Index_Record(Rectangle(2, 5, 1, 3), 3))
+    rt.insert(Index_Record(Rectangle(2, 5, 1, 3), 2))
     rt.print_tree(rt.root, 0)
     print()
 
-    rt.insert(Index_Record(Rectangle(6, 7, 5, 6), 4))
+    rt.insert(Index_Record(Rectangle(6, 7, 5, 6), 3))
     rt.print_tree(rt.root, 0)
     print()
     
 
-    rt.insert(Index_Record(Rectangle(1, 5, 2, 4), 5))
+    rt.insert(Index_Record(Rectangle(1, 5, 2, 4), 4))
     print("ok1")
     rt.print_tree(rt.root, 0)
     print()
-    rt.insert(Index_Record(Rectangle(10, 12, 6, 8), 6))
+    rt.insert(Index_Record(Rectangle(10, 12, 6, 8), 5))
     print("ok2")
     rt.print_tree(rt.root, 0)
     print()
 
-    rt.insert(Index_Record(Rectangle(5, 7, 5, 6), 7))
+    rt.insert(Index_Record(Rectangle(5, 7, 5, 6), 6))
     print("ok3")
     rt.print_tree(rt.root, 0)
     print()
 
-    rt.insert(Index_Record(Rectangle(1, 3, 7, 9), 8))
+    rt.insert(Index_Record(Rectangle(1, 3, 7, 9), 7))
     print("ok4")
     rt.print_tree(rt.root, 0)
 
-    rt.insert(Index_Record(Rectangle(20, 23, 15, 19), 9))
+    rt.insert(Index_Record(Rectangle(20, 23, 15, 19), 8))
     print("ok4")
     rt.print_tree(rt.root, 0)
+
+    rt.insert(Index_Record(Rectangle(1, 4, 2, 3), 9))
+    print("ok4")
+    rt.print_tree(rt.root, 0)
+
+    rt.insert(Index_Record(Rectangle(1, 4, 1, 4), 10))
+    print("ok4")
+    rt.print_tree(rt.root, 0)
+
+    rt.insert(Index_Record(Rectangle(1, 3, 5, 7), 11))
+    print("ok4")
+    rt.print_tree(rt.root, 0)
+
+    rt.insert(Index_Record(Rectangle(1, 5, 2, 3), 12))
+    print("ok4")
+    rt.print_tree(rt.root, 0)
+
+    rt.insert(Index_Record(Rectangle(1, 4, 2, 3), 13))
+    print("ok4")
+    rt.print_tree(rt.root, 0)
+
+    miss_test = rt.missing_test(rt.root, [False for _ in range(14)])
+    if all(miss_test):
+        print("OK")
+    else:
+        print("Something is missing")
+        print(miss_test)
