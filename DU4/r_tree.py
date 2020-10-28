@@ -1,11 +1,15 @@
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle as pltRec
 
 
+# Class for a set of unique identifiers
 class ID_set():
     def __init__(self):
         self.ide_counter = 'A'
         self.ide = 'A'
 
+    # Get unique identifier
     def get_ide(self):
         ret = self.ide
         offset = 'A' if ret == len(ret)*'Z' else ''
@@ -51,29 +55,24 @@ class Index_Record():
 
 class R_tree():
     def __init__(self, M):
-        self.M = M
-        self.id_set = ID_set()
+        self.M = M # Maximum number of stored records in one node
+        self.id_set = ID_set() # Set of unique identifiers for nodes
         self.root = R_node(M, self.id_set, None, is_root=True, is_leaf=True)
     
     def insert(self, E):
         L = self.choose_leaf(self.root, E)
         Ll = None
-        print("Leaf chosen:")
-        L.print_node()
-        if L.no_of_keys < self.M: # Mame misto
+        if L.no_of_keys < self.M:
+            # There is a space
             L.keys[L.no_of_keys] = E
             L.no_of_keys += 1    
-        else: # Nemame misto
+        else:
+            # There is no space
             L, Ll = L.split_node(E)
-        print("After potential split")
-        L.print_node()
-        if Ll:
-            print("Ll:")
-            Ll.print_node()
         
         L, Ll = self.adjust_tree(L, Ll)
         if Ll is not None:
-            print("NEW ROOOT")
+            # We have to make a new root
             new_root = R_node(self.M, self.id_set, None, is_root=True, is_leaf=False)
             new_root.keys[0] = Index_Record(get_bounded_rectangle(L.keys), L.ide)
             new_root.keys[1] = Index_Record(get_bounded_rectangle(Ll.keys), Ll.ide)
@@ -89,68 +88,47 @@ class R_tree():
             self.root = new_root
         else:
             self.root = L
+
+        # Traverse the tree and renew the information about predecesor for each node
         self.adjust_preds(self.root)
 
     def choose_leaf(self, N, E):
-        # CL2
         if N.is_leaf:
             return N
-        # CL3
         F = None
         minimum = np.inf
         pf = -1
-
         for i in range(N.no_of_keys):
             record = N.keys[i]
             diff = get_bounded_rectangle([record, E]).area() - record.I.area()
             if diff < minimum:
-                F = record # Copy?
+                F = record
                 minimum = diff
                 pf = i
             elif diff == minimum and F is not None:
-                if record.I.area() < F.I.area(): # Vzit mensi obdelnik
+                if record.I.area() < F.I.area():
                     F = record
                     pf = i
-        
         assert(pf != -1)
-        # CL4
         return self.choose_leaf(N.children[pf], E)
 
     def adjust_tree(self, N, Nn=None):
-        # AT2
         if N.is_root:
             return N, Nn
-
-        # AT3
         P = N.pred
-
-        print("Pred:")
-        P.print_node()
-
         En, idx = P.find_record(N)
         En.I = get_bounded_rectangle(N.keys)
         P.children[idx] = N
 
-        print("AT3")
-
-        # AT4
         if Nn is not None:
-            print("AT4")
-            print(N.ide, Nn.ide)
-            print(P.no_of_keys)
             Enn = Index_Record(get_bounded_rectangle(Nn.keys), ide=Nn.ide)
             if P.no_of_keys < self.M:
                 P.keys[P.no_of_keys] = Enn
                 P.children[P.no_of_keys] = Nn
                 P.no_of_keys += 1
-                print("AT4.1")
                 return self.adjust_tree(P, None)
             else:
-                print("AT4.2")
                 P, Pp = P.split_node(Enn, True, Nn)
-                print("After split>")
-                P.print_node()
-                Pp.print_node()
                 return self.adjust_tree(P, Pp)
         return self.adjust_tree(P, None)
 
@@ -172,7 +150,7 @@ class R_tree():
         elif N.is_root:
             print("ROOT")
         else:
-            print("NOT LEAF")
+            print("INNER NODE")
         for key in N.keys:
             if key is None:
                 break
@@ -189,6 +167,22 @@ class R_tree():
                 if key:
                     ides[key.ide] = True
         return ides
+
+    def plot_tree(self):
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        rec = get_bounded_rectangle(self.root.keys)
+        self.root.plot_node(ax)
+        ax.add_patch(pltRec(
+            xy=(rec.x1, rec.y1),
+            width=rec.x2-rec.x1,
+            height=rec.y2-rec.y1,
+            linestyle = '-',
+            linewidth=1.3,
+            color='b',
+            fill=False))
+        ax.text(rec.x2, rec.y1, self.root.ide, fontsize=14, color='b')
+        plt.show()
         
 
 class R_node():
@@ -206,7 +200,6 @@ class R_node():
     def __eq__(self, other): 
         if not isinstance(other, R_node):
             return False
-        print("eq", len(self.keys), len(other.keys))
         for i in range(self.M):
             if self.keys[i] and not other.keys[i]:
                 return False
@@ -225,9 +218,7 @@ class R_node():
         records.append(E)
         children = self.children
         if has_children:
-            print("HAS CHILDREN!", end=" ")
             children.append(Nn)
-
 
         A, B, C1, C2 = pick_seeds(records, children, has_children)
         first.append(A)
@@ -236,16 +227,13 @@ class R_node():
         second_children.append(C2)
 
         while len(records) > 0:
-            print("SPLIT:", len(first), len(second), "remaining:", len(records), len(children)) 
             if help_QS2(self.M, len(first), len(second), len(records)):
                 first.extend(records)
                 first_children.extend(children)
-                print("HELP QS2.1:", len(first), len(second))
                 return self.ret_split(first, second, first_children, second_children, has_children)
             if help_QS2(self.M, len(second), len(first), len(records)):
                 second.extend(records)
                 second_children.extend(children)
-                print("HELP QS2.2:", len(first), len(second))
                 return self.ret_split(first, second, first_children, second_children, has_children)
 
             first_area = get_bounded_rectangle(first).area()
@@ -277,10 +265,7 @@ class R_node():
         return self.ret_split(first, second, first_children, second_children, has_children)
 
     def find_record(self, N):
-        print("Find record, no_of_keys:", self.no_of_keys)
         for i in range(self.no_of_keys):
-            print(i, len(self.children), len(self.keys))
-            print("for", i, N.ide, self.children[i].ide, self.keys[i].ide)
             if N.ide == self.keys[i].ide:
                 return self.keys[i], i
         return None, None
@@ -307,11 +292,34 @@ class R_node():
         print("Node id: {}, keys:".format(self.ide), end=" ")
         for key in self.keys:
             if key is None:
-                print("Nonekey")
+                print("[Nonekey]")
                 continue
             print("Key id: {}".format(key.ide))
             key.I.print_rec()
         print()
+
+    def plot_node(self, ax):
+        for record in self.keys:
+            if record:
+                rec = record.I
+                ax.add_patch(pltRec(
+                    xy=(rec.x1, rec.y1),
+                    width=rec.x2-rec.x1,
+                    height=rec.y2-rec.y1,
+                    linestyle = 'dotted' if self.is_leaf else '--',
+                    linewidth=1 if self.is_leaf else 1.2,
+                    color='r' if self.is_leaf else 'b',
+                    fill=False))
+                ax.text(
+                    (rec.x1+rec.x2)/2,
+                    (rec.y1+rec.y2)/2,
+                    record.ide,
+                    fontsize=10,
+                    color='r' if self.is_leaf else 'b')
+        for child in self.children:
+            if child:
+                child.plot_node(ax)
+        ax.axis('equal')
 
 
 
@@ -329,7 +337,6 @@ def pick_seeds(records, children=None, has_children=False):
                 break
             J = get_bounded_rectangle([E1, E2])
             area = J.area() - E1.I.area() - E2.I.area()
-            print(area)
             if area > d:
                 d = area
                 F1 = E1
@@ -376,7 +383,7 @@ def get_bounded_rectangle(records):
         if record is None:
             break
         if record.I.x1 < new_rectangle.x1:
-            new_rectangle.x1 = record.I.x1 #  +1 ? jak moc tesne to ma byt?
+            new_rectangle.x1 = record.I.x1
         if record.I.x2 > new_rectangle.x2:
             new_rectangle.x2 = record.I.x2
         if record.I.y1 < new_rectangle.y1:
