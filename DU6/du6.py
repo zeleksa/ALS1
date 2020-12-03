@@ -35,7 +35,7 @@ class Object_():
         self.dist = np.inf
 
 
-Branch = namedtuple('Branch', ['MBR', 'Node', 'MinDist', 'MinMaxDist'])
+Branch = namedtuple('Branch', ['MBR', 'Node', 'MinDist']) #, 'MinMaxDist'])
 BranchList = List[Branch]
 
 
@@ -92,14 +92,14 @@ def object_dist(point: Point, rec: Rectangle):
     return np.sqrt(dist)
 
 
-def gen_branch_list(point: Point, node: R_node) -> BranchList:
+def gen_branch_list(point: Point, node: R_node, calculate_minmax=False) -> BranchList:
     branch_list = []
     for i in range(node.no_of_keys):
         branch_list.append(Branch(
             MBR=node.keys[i].I,
             Node=node.children[i],
-            MinDist=min_dist(point, node.keys[i].I),
-            MinMaxDist=min_max_dist(point, node.keys[i].I) # Mozna zbytecne
+            MinDist=min_dist(point, node.keys[i].I)
+            #MinMaxDist=min_max_dist(point, node.keys[i].I) # Mozna zbytecne
         ))
     return sorted(branch_list, key=attrgetter('MinDist'))
 
@@ -109,15 +109,16 @@ def prune_branch_list_down(node: R_node, point: Point, nearest: Object_, branch_
     del_indices = []
     for i in range(len(branch_list)):
         for j in range(len(branch_list)):
-            if i != j and branch_list[i].MinDist > branch_list[j].MinMaxDist:
+            if i != j and branch_list[i].MinDist > min_max_dist(point, branch_list[j].MBR):
                 del_indices.append(i)
                 break
     remove_elements(branch_list, del_indices)
     
     # H2
     for branch in branch_list:
-        if nearest.dist > branch.MinMaxDist:
-            nearest.dist = branch.MinMaxDist# np.inf # object_dist(point, branch.MBR) ?
+        mmd = min_max_dist(point, branch.MBR)
+        if nearest.dist > mmd:
+            nearest.dist = mmd # np.inf # object_dist(point, branch.MBR) ?
             nearest.rect = branch.MBR # None # branch.MBR ?
 
 
@@ -171,7 +172,7 @@ def NNSearch_2(node: R_node, point: Point, nearest: Object_):
 
 if __name__ == "__main__":
     # Test min_dist and minmax_dist
-    R = Rectangle(4, 8, 4, 6)
+    """R = Rectangle(4, 8, 4, 6)
     Q1 = Point([2, 5])
     Q2 = Point([2, 12])
     print(np.sqrt(min_dist(Q1, R)))
@@ -179,7 +180,7 @@ if __name__ == "__main__":
 
     print(min_max_dist(Q1, R))
     print(min_max_dist(Q2, R))
-    print("-------------------")
+    print("-------------------")"""
 
     rt = R_tree(3)
     
@@ -199,6 +200,8 @@ if __name__ == "__main__":
     rt.insert(Index_Record(Rectangle(1, 5, 2, 3), 12))
     rt.insert(Index_Record(Rectangle(1, 4, 2, 3), 13))
     """
+
+    # Insert points instead of rectangles
     rt.insert(Index_Record(Rectangle(1, 1, 2, 2), 0))
     rt.insert(Index_Record(Rectangle(3, 3, 4, 4), 1))
     rt.insert(Index_Record(Rectangle(2, 2, 3, 3), 2))
@@ -214,10 +217,11 @@ if __name__ == "__main__":
     rt.insert(Index_Record(Rectangle(5, 5, 3, 3), 12))
     rt.insert(Index_Record(Rectangle(4, 4, 3, 3), 13))
     
-
+    # Generate 50 points
     N = 50
     points = np.array([np.repeat(np.arange(N), N), np.tile(np.arange(N), N)]).T
 
+    # Measure time of the first algorithm for 50 points
     time_start = time.time()
     for i in range(N**2):
         Q = Point(points[i])
@@ -226,6 +230,7 @@ if __name__ == "__main__":
     time_end = time.time()
     print(f"Alg 1: {time_end - time_start}")
 
+    # Measure time of the second algorithm for 50 points
     time_start = time.time()
     for i in range(N**2):
         Q = Point(points[i])
