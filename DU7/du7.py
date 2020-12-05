@@ -164,7 +164,6 @@ def make_tree_from_leaves(groups: List[List[Rectangle]], N: int, c: int, str_tre
     number_of_inner_nodes = get_number_of_nodes(N, c, len(leafs) if str_tree else None) - len(groups)
     nodes_stack = [Static_R_node(c) for _ in range(number_of_inner_nodes)]
     inner_nodes = []
-
     root = None
 
     while len(nodes_stack) > 0:
@@ -181,12 +180,10 @@ def make_tree_from_leaves(groups: List[List[Rectangle]], N: int, c: int, str_tre
         node.set_rects(mbrs)
         node.set_MBR(get_mbr(mbrs))
         inner_nodes.append(node)
-        print(len(inner_nodes), len(leafs))
         if len(leafs) == 0:
             leafs = inner_nodes
             root = inner_nodes[-1]
             inner_nodes = []
-
     return root    
     
 
@@ -223,13 +220,10 @@ def build_static_hilbert_tree(rectangles: List[Rectangle], N: int, c: int):
 def build_static_str_tree(rectangles: List[Rectangle], N: int, c: int):
     n_l = math.ceil(N/c)
     VS = math.ceil(math.sqrt(n_l))
-    print(f"VS = {VS}")
     stripes_x = uniform_stripes(rectangles, N, VS)
     groups = []
     for stripe_x in stripes_x:
-        # VS=2??? podle zadani rozdelit do dvou mnozin, ale ta 2 bude asi podle neceho jineho, nevim
-        groups.extend(uniform_stripes(stripe_x, N=len(stripe_x), VS=math.floor(math.sqrt(n_l)), x=False))
-    
+        groups.extend(uniform_stripes(stripe_x, N=len(stripe_x), VS=VS, x=False))
     return make_tree_from_leaves(groups, N, c, str_tree=True)
         
 
@@ -339,6 +333,8 @@ if __name__ == "__main__":
     root = build_static_hilbert_tree(rectangles, N, c)
     print_tree(root, 0)
     """
+
+    # Pro c = 2 se u STR ztrati jeden uzel s dvema obdelniky
     root = build_static_str_tree(rectangles, N, c)
     print_tree(root, 0)
     
