@@ -1,6 +1,7 @@
 import numpy as np
 import itertools
 import math
+import random
 from typing import List
 from collections import namedtuple
 from operator import attrgetter
@@ -13,11 +14,12 @@ MAX_HILBERT_ORDER = 10
 Rect_info = namedtuple('Rect_info', ['Rect', 'Center', 'H'])
 
 class Static_R_node():
-    def __init__(self, M, pred):
+    def __init__(self, M):
         self.M = M
-        self.pred = pred
+        self.MBR = None
+        self.pred = None
         self.rectangles = [None for _ in range(M)]
-        self.children = [None for _ in range(M)]        
+        self.children = [None for _ in range(M)]
 
     def set_rects(self, rectangles: List[Rectangle]):
         for i in range(self.M):
@@ -33,11 +35,17 @@ class Static_R_node():
             else:
                 self.children[i] = children[i]
 
+    def set_pred(self, pred):
+        self.pred = pred
+
+    def set_MBR(self, MBR):
+        self.MBR = MBR
+
     def is_root(self):
         return True if self.pred is None else False
 
     def is_leaf(self):
-        return True if all([x is None for x in self.children]) else False
+        return True if self.children is None or all([x is None for x in self.children]) else False
 
 
 
@@ -54,14 +62,20 @@ def round_(x, y, i):
     print("Round ERROR")
     return None, None
 
+
+def get_center(rect: Rectangle, i=random.randint(0, 4)):
+    x, y = round_((rect.x1 + rect.x2) / 2, (rect.y1 + rect.y2) / 2, i)
+    return Rectangle(x, x, y, y)
+
+
 def get_centers(rectangles: List[Rectangle]) -> List[Rectangle]:
     centers = []
     for i in range(len(rectangles)):
         rect = rectangles[i]
         #x = math.floor((rect.x1 + rect.x2) / 2)
         #y = math.floor((rect.y1 + rect.y2) / 2)
-        x, y = round_((rect.x1 + rect.x2) / 2, (rect.y1 + rect.y2) / 2, i)
-        centers.append(Rectangle(x, x, y, y))
+        #x, y = round_((rect.x1 + rect.x2) / 2, (rect.y1 + rect.y2) / 2, i)
+        centers.append(get_center(rect)) #Rectangle(x, x, y, y))
     return centers
 
 
@@ -97,14 +111,8 @@ def sort_rectangles(rectangles: List[Rectangle]) -> List[Rect_info]:
     centers = get_centers(rectangles)
     n = get_hilbert_curve_order(get_mbr(centers))
     rect_list = []
-
-    print(f"H order: {n}")
-
     for (rect, center) in zip(rectangles, centers):
         assert(center.x1 == center.x2 and center.y1 == center.y2)
-        rect.print_rec()
-        center.print_rec()
-        print("=====")
         rect_list.append(Rect_info(
             Rect=rect,
             Center=center,
@@ -126,32 +134,144 @@ def group_rectangles(rectangels: List[Rect_info], c: int) -> List[List[Rectangle
     return groups
 
 
-def get_mbrs_and_nodes_for_groups(pred: Static_R_node, groups: List[List[Rectangle]], c: int) -> List[Rectangle]:
-    mbrs = []
+def get_nodes_for_groups(groups: List[List[Rectangle]], c: int) -> List[Rectangle]:
     nodes = []
     for group in groups:
-        mbrs.append(get_mbr(group))
-        node = Static_R_node(c, pred)
+        node = Static_R_node(c)
+        node.set_MBR(get_mbr(group))
         node.set_rects(group)
         nodes.append(node)
-    return mbrs, nodes
-        
+    return nodes
+
+
+def get_number_of_nodes(N, c, no_of_leaves=None):
+    m = no_of_leaves if no_of_leaves else math.ceil(N/c)
+    node_count = m
+    while m > 1:
+        m = math.ceil(m/c)
+        node_count += m
+    return node_count
+
+
+def make_tree_from_leaves(groups: List[List[Rectangle]], N: int, c: int, str_tree=False) -> Static_R_node:
+    leafs = []
+    for group in groups:
+        node = Static_R_node(c)
+        node.set_MBR(get_mbr(group))
+        node.set_rects(group)
+        leafs.append(node)
+
+    number_of_inner_nodes = get_number_of_nodes(N, c, len(leafs) if str_tree else None) - len(groups)
+    nodes_stack = [Static_R_node(c) for _ in range(number_of_inner_nodes)]
+    inner_nodes = []
+
+    root = None
+
+    while len(nodes_stack) > 0:
+        node = nodes_stack.pop()
+        children = []
+        mbrs = []
+        for i in range(c):
+            if len(leafs) > 0:
+                leaf = leafs.pop()
+                leaf.set_pred(node)
+                children.append(leaf)
+                mbrs.append(leaf.MBR)
+        node.set_children(children)
+        node.set_rects(mbrs)
+        node.set_MBR(get_mbr(mbrs))
+        inner_nodes.append(node)
+        print(len(inner_nodes), len(leafs))
+        if len(leafs) == 0:
+            leafs = inner_nodes
+            root = inner_nodes[-1]
+            inner_nodes = []
+
+    return root    
     
-def build_static_hilbert_tree(root: Static_R_node, rectangles: List[Rectangle], N: int, c: int):
-    print_rectangeles(rectangles)
+
+def uniform_distr(N: int, VS: int):
+    counts = []
+    count = math.floor(N/VS)
+    for i in range(VS):
+        counts.append(count)
+    rest = N - sum(counts)
+    for i in range(rest):
+        counts[i] += 1
+    return counts
+
+
+def uniform_stripes(rectangles: List[Rectangle], N: int, VS: int, x=True) -> List[List[Rectangle]]:
+    #centers = get_centers(rectangles)
+    #centers.sort(key=lambda r: r.x1)
+    rectangles.sort(key=lambda r: get_center(r).x1 if x else get_center(r).y1)
+    counts = uniform_distr(N, VS)
+    stripes = []
+    start = 0
+    for i in range(VS):
+        stripes.append(rectangles[start:start+counts[i]])
+        start += counts[i]
+    return stripes
+
+
+def build_static_hilbert_tree(rectangles: List[Rectangle], N: int, c: int):
     sorted_rectangels = sort_rectangles(rectangles)
     groups = group_rectangles(sorted_rectangels, c)
+    return make_tree_from_leaves(groups, N, c)
+
+
+def build_static_str_tree(rectangles: List[Rectangle], N: int, c: int):
+    n_l = math.ceil(N/c)
+    VS = math.ceil(math.sqrt(n_l))
+    print(f"VS = {VS}")
+    stripes_x = uniform_stripes(rectangles, N, VS)
+    groups = []
+    for stripe_x in stripes_x:
+        # VS=2??? podle zadani rozdelit do dvou mnozin, ale ta 2 bude asi podle neceho jineho, nevim
+        groups.extend(uniform_stripes(stripe_x, N=len(stripe_x), VS=math.floor(math.sqrt(n_l)), x=False))
+    
+    return make_tree_from_leaves(groups, N, c, str_tree=True)
+        
+
+
+
+
+    
+        
+#def build_static_hilbert_tree_rec(nodes: List[Static_R_node], N, c)
+#    if len(nodes) > c:
+
+
+    """
+def build_static_hilbert_tree(root: Static_R_node, rectangles: List[Rectangle], N: int, c: int):
+    # Vzhledem k tomu, ze znam predem pocet vkladanych obdelniku, tak si muzu strom setavit predem
+    # a uzly podle toho rozvrhnout a pak uz je tam jenom poskladat
+    # Ale mozna taky ne
+    # Nejdriv namalovat priklad na nekolik rekurzi - podle toho to vymymslet
+    print("Call")
+    sorted_rectangels = sort_rectangles(rectangles)
+    groups = group_rectangles(sorted_rectangels, c)
+
     mbrs, children = get_mbrs_and_nodes_for_groups(root, groups, c)
+
+
     if len(mbrs) <= c:
         root.set_rects(mbrs)
-        root.set_children(children)
+        root.set_children(children, 0)
         return root
     else:
         print("Recursion")
         new_root = Static_R_node(c, None)
         new_root = build_static_hilbert_tree(new_root, mbrs, len(mbrs), c)
         # TODO vymyslet napojovani
+
+        for i in range(len(new_root.children)):
+            child = new_root.children[i]
+            if child:
+                child.set_children(children, i*c)
+
         return new_root
+    """
 
 
     
@@ -209,10 +329,16 @@ if __name__ == "__main__":
     ]
     N = len(rectangles)
     c = 3
-
+    """
     root = Static_R_node(c, None)
     root = build_static_hilbert_tree(root, rectangles, N, c)
     print_tree(root, 0)
-
-
+    """
+    """
+    print(get_number_of_nodes(N, c))
+    root = build_static_hilbert_tree(rectangles, N, c)
+    print_tree(root, 0)
+    """
+    root = build_static_str_tree(rectangles, N, c)
+    print_tree(root, 0)
     
