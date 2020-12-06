@@ -297,6 +297,15 @@ def print_tree(node: Static_R_node, depth: int):
             continue
         rect.print_rec()
     print("------")
+
+
+def count_nodes(node: Static_R_node):
+    if node is None:
+        return 0
+    count = 1
+    for child in node.children:
+        count += count_nodes(child)
+    return count
     
 
 def print_rectangeles(rectangles):
@@ -323,18 +332,36 @@ if __name__ == "__main__":
     ]
     N = len(rectangles)
     c = 3
-    """
-    root = Static_R_node(c, None)
-    root = build_static_hilbert_tree(root, rectangles, N, c)
-    print_tree(root, 0)
-    """
-    """
-    print(get_number_of_nodes(N, c))
-    root = build_static_hilbert_tree(rectangles, N, c)
-    print_tree(root, 0)
-    """
 
-    # Pro c = 2 se u STR ztrati jeden uzel s dvema obdelniky
-    root = build_static_str_tree(rectangles, N, c)
-    print_tree(root, 0)
+    hilbert_root = build_static_hilbert_tree(rectangles, N, c)
+    str_root = build_static_str_tree(rectangles, N, c)
+
+    # Count nodes of both trees
+    print(f"{N} rectangles:")
+    print("  Hilbert node count =", count_nodes(hilbert_root))
+    print("  STR node count =", count_nodes(str_root))
+
+    # Experiment
+    M = 350
+    c = 3
+    points = np.array([np.repeat(np.arange(M), M),
+                       np.tile(np.arange(M), M),
+                       np.repeat(np.arange(M), M),
+                       np.tile(np.arange(M), M)]).T
+    rectangles = []
+    for point in points:
+        if point[0] < point[1] and point[2] < point[3]:
+            rectangles.append(Rectangle(point[0], point[1], point[2], point[3]))
     
+    start = 0
+    end = 50
+    for i in range(M//end):
+        rects = rectangles[start:end]
+        N = len(rects)
+        hilbert_root = build_static_hilbert_tree(rects, N, c)
+        str_root = build_static_str_tree(rects, N, c)
+        print(f"{N} rectangles:")
+        print("  Hilbert node count =", count_nodes(hilbert_root))
+        print("  STR node count =", count_nodes(str_root))
+        end += 50
+
